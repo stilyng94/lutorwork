@@ -33,30 +33,30 @@ exports.validatorWare = (req, res, next) => {
     return res.status(400).json(responseGen(invalidConditionValue));
   }
   //!If the field specified in the rule object is missing from the data passed
-  const [result, searchKey, missing] = drill(rule.field, data);
+  const [result, missing] = drill(rule.field, data);
   if (missing) {
     return res.status(400).json(`field ${missing} is missing from data.`);
   }
   //!Make validation against condition
   if (!makeValidation(result, rule.condition_value, rule.condition)) {
-    req.message = `field ${searchKey} failed validation.`;
+    req.message = `field ${rule.field} failed validation.`;
     req.status = "error";
     req.respData = {
       validation: {
         error: true,
-        field: searchKey,
+        field: `${rule.field}`,
         field_value: result,
         condition: rule.condition,
         condition_value: rule.condition_value,
       },
     };
   } else {
-    req.message = `field ${searchKey} successfully validated.`;
+    req.message = `field ${rule.field} successfully validated.`;
     req.status = "success";
     req.respData = {
       validation: {
         error: false,
-        field: searchKey,
+        field: `${rule.field}`,
         field_value: result,
         condition: rule.condition,
         condition_value: rule.condition_value,
@@ -96,14 +96,12 @@ const checkConditions = (condition) => {
 const drill = (field = "", data = {}) => {
   let result;
   let missing;
-  let searchKey;
   let query = { ...data };
   const keys = field.split(".");
 
   keys.forEach((key) => {
     if (query[key]) {
       result = query[key];
-      searchKey = key;
       query = { ...result };
     } else {
       missing = key;
@@ -111,7 +109,7 @@ const drill = (field = "", data = {}) => {
       return;
     }
   });
-  return [result, searchKey, missing];
+  return [result, missing];
 };
 
 const makeValidation = (data, condition_value, condition) => {
