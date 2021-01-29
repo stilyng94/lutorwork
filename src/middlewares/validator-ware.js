@@ -2,7 +2,6 @@ const { responseGen } = require("../utils/response-gen");
 
 exports.validatorWare = (req, res, next) => {
   const { rule, data } = req.body;
-  console.log(typeof data);
   //!Check if rule key exists
   if (!rule) {
     return res.status(400).json(responseGen("rule is required."));
@@ -24,7 +23,7 @@ exports.validatorWare = (req, res, next) => {
       );
   }
   //!Checks if Rule contains necessary keys
-  const invalidRule = checkRuleKeys(Object.keys(rule));
+  const invalidRule = checkRuleKeys(Object.keys(rule), rule);
   if (invalidRule) {
     return res.status(400).json(responseGen(invalidRule));
   }
@@ -38,31 +37,46 @@ exports.validatorWare = (req, res, next) => {
   if (missing) {
     return res.status(400).json(`field ${missing} is missing from data.`);
   }
-  req.message = `field ${searchKey} successfully validated.`;
-  req.status = "success";
-  req.respData = {
-    validation: {
-      error: false,
-      field: searchKey,
-      field_value: result,
-      condition: rule.condition,
-      condition_value: rule.condition_value,
-    },
-  };
+  //!Make validation against condition
+  if (!makeValidation(result, rule.condition_value, rule.condition)) {
+    req.message = `field ${searchKey} failed validation.`;
+    req.status = "error";
+    req.respData = {
+      validation: {
+        error: true,
+        field: searchKey,
+        field_value: result,
+        condition: rule.condition,
+        condition_value: rule.condition_value,
+      },
+    };
+  } else {
+    req.message = `field ${searchKey} successfully validated.`;
+    req.status = "success";
+    req.respData = {
+      validation: {
+        error: false,
+        field: searchKey,
+        field_value: result,
+        condition: rule.condition,
+        condition_value: rule.condition_value,
+      },
+    };
+  }
   return next();
 };
 
 const acceptedConditions = ["eq", "neq", "gt", "gte", "contains"];
 const ruleKeys = ["field", "condition", "condition_value"];
 
-const checkRuleKeys = (keys = []) => {
+const checkRuleKeys = (keys = [], ruleObject) => {
   if (keys.length < 1) {
     return "rule field should be a valid JSON object.";
   }
   let data;
 
   ruleKeys.forEach((rule) => {
-    if (!keys.includes(rule)) {
+    if (!keys.includes(rule) && ruleObject[rule]) {
       data = `rule.${rule} is required.`;
     }
   });
@@ -98,4 +112,47 @@ const drill = (field = "", data = {}) => {
     }
   });
   return [result, searchKey, missing];
+};
+
+const makeValidation = (data, condition_value, condition) => {
+  let isValid = false;
+
+  switch (condition) {
+    case "eq":
+      isValid = data === condition_value;
+      break;
+    case "neq":
+      isValid = data !== condition_value;
+      break;
+    case "gt":
+      if (typeof data !== "number") {
+        //!error
+        isValid = false;
+      } else {
+        isValid = data > condition_value;
+      }
+      break;
+    case "gte":
+      if (typeof data !== "number") {
+        //!error
+        isValid = false;
+      } else {
+        isValid = data >= condition_value;
+      }
+      break;
+    case "contains":
+      if (
+        typeof data === "number" ||
+        typeof data === "string" ||
+        data instanceof Array
+      ) {
+        isValid = data.includes(condition_value);
+      } else {
+        isValid = Object.values(data).includes(condition_value);
+      }
+      break;
+    default:
+      break;
+  }
+  return isValid;
 };
